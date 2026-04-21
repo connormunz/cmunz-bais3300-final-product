@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Vita-Win"
+version = "1.0.0"
+id = "artifacts/vita-win"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18084
+
+[services.development]
+run = "pnpm --filter @workspace/vita-win run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/vita-win", "run", "build" ]
+publicDir = "artifacts/vita-win/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18084"
+BASE_PATH = "/"

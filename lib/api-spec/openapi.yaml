@@ -1,0 +1,252 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: logs
+    description: Medication log operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /logs/today:
+    get:
+      operationId: getTodayLog
+      tags: [logs]
+      summary: Get today's log
+      description: Returns today's medication log status, or null if not yet logged
+      parameters:
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date
+          description: The client's local date (YYYY-MM-DD). If omitted, the server falls back to UTC.
+      responses:
+        "200":
+          description: Today's log (null if not yet logged)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodayLogResponse"
+
+    post:
+      operationId: logToday
+      tags: [logs]
+      summary: Log today's status
+      description: >
+        Log whether medication was taken or skipped today.
+        Pass the client's local date in the `date` field to avoid UTC timezone drift.
+        If a log already exists for the given date and `override` is false (default), returns 409.
+        Set `override: true` to replace an existing log (e.g. when the user explicitly changes status).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LogTodayBody"
+      responses:
+        "200":
+          description: Log saved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicationLog"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Already logged today and override was not set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlreadyLoggedResponse"
+
+  /logs/history:
+    get:
+      operationId: getLogHistory
+      tags: [logs]
+      summary: Get log history
+      description: Returns paginated log history ordered by date descending
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 30
+          description: Number of records to return
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          description: Number of records to skip
+      responses:
+        "200":
+          description: Log history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogHistoryResponse"
+
+  /logs/summary:
+    get:
+      operationId: getAdherenceSummary
+      tags: [logs]
+      summary: Get adherence summary
+      description: Returns streak and adherence stats for the user
+      responses:
+        "200":
+          description: Adherence summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdherenceSummary"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    LogStatus:
+      type: string
+      enum: [taken, skipped]
+
+    MedicationLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          format: date
+          description: ISO date string (YYYY-MM-DD)
+        status:
+          $ref: "#/components/schemas/LogStatus"
+        loggedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - date
+        - status
+        - loggedAt
+        - createdAt
+
+    TodayLogResponse:
+      type: object
+      properties:
+        log:
+          oneOf:
+            - $ref: "#/components/schemas/MedicationLog"
+            - type: "null"
+      required:
+        - log
+
+    LogTodayBody:
+      type: object
+      properties:
+        status:
+          $ref: "#/components/schemas/LogStatus"
+        date:
+          type: string
+          format: date
+          description: The client's local date (YYYY-MM-DD). If omitted, falls back to server UTC date.
+        override:
+          type: boolean
+          default: false
+          description: If true, replaces an existing log for the given date. Required when changing a logged status.
+      required:
+        - status
+
+    AlreadyLoggedResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        existingLog:
+          $ref: "#/components/schemas/MedicationLog"
+      required:
+        - error
+        - existingLog
+
+    LogHistoryResponse:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/MedicationLog"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+      required:
+        - logs
+        - total
+        - limit
+        - offset
+
+    AdherenceSummary:
+      type: object
+      properties:
+        currentStreak:
+          type: integer
+          description: Consecutive days logged (taken or skipped) up to and including today
+        longestStreak:
+          type: integer
+          description: Longest ever consecutive logged streak
+        loggedDaysLast30:
+          type: integer
+          description: Number of days logged in the last 30 days
+        takenDaysLast30:
+          type: integer
+          description: Number of days marked taken in the last 30 days
+        adherenceRateLast30:
+          type: number
+          description: Percentage of last 30 days where a status was logged (0-100)
+      required:
+        - currentStreak
+        - longestStreak
+        - loggedDaysLast30
+        - takenDaysLast30
+        - adherenceRateLast30
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
